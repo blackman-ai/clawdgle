@@ -1,12 +1,19 @@
 import base64
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
 from clawdgle.config import load_config
 from clawdgle.index import ensure_collection, find_by_url, make_typesense_client, search
-from clawdgle.queue import enqueue, get_heartbeat, get_stats, make_redis
+from clawdgle.queue import (
+    enqueue,
+    enqueue_suggestion,
+    get_heartbeat,
+    get_stats,
+    list_suggestions,
+    make_redis,
+)
 from clawdgle.storage import get_markdown, make_s3_client
 
 app = FastAPI(title="clawdgle", version="0.1")
@@ -21,6 +28,12 @@ s3_client = make_s3_client(cfg)
 class SeedRequest(BaseModel):
     urls: list[str]
     depth: int = 1
+
+
+class SuggestRequest(BaseModel):
+    url: str
+    reason: str | None = None
+    contact: str | None = None
 
 
 @app.get("/health")
@@ -48,6 +61,34 @@ async def homepage():
       <input name="q" placeholder="Search markdown index" />
       <button type="submit">Search</button>
     </form>
+    <h2>Ingest a URL</h2>
+    <input id="suggest-url" placeholder="https://example.com" />
+    <button id="suggest-send">Submit</button>
+    <div id="suggest-status"></div>
+    <p><a href="/donate">Donate</a></p>
+    <script>
+      const sUrl = document.getElementById("suggest-url");
+      const sBtn = document.getElementById("suggest-send");
+      const sStatus = document.getElementById("suggest-status");
+      sBtn.addEventListener("click", async () => {
+        sStatus.textContent = "Submitting...";
+        try {
+          const resp = await fetch("/ingest", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: sUrl.value })
+          });
+          if (!resp.ok) {
+            sStatus.textContent = "Error: " + resp.status;
+            return;
+          }
+          sStatus.textContent = "Submitted.";
+          sUrl.value = "";
+        } catch (err) {
+          sStatus.textContent = "Error: " + err;
+        }
+      });
+    </script>
   </body>
 </html>"""
 
@@ -95,6 +136,13 @@ async def stats(request: Request):
     queue_depth = redis_client.llen("crawl:queue")
     heartbeat_ts = get_heartbeat(redis_client)
     return {"stats": stats, "queue_depth": queue_depth, "crawler_heartbeat": heartbeat_ts}
+
+
+@app.get("/suggestions")
+async def suggestions(request: Request, limit: int = 50):
+    if not _admin_ok(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return {"items": list_suggestions(redis_client, limit=limit)}
 
 
 @app.get("/admin-ui", response_class=HTMLResponse)
@@ -186,6 +234,23 @@ async def seed(req: SeedRequest):
     for url in req.urls:
         enqueue(redis_client, url, req.depth)
     return {"queued": len(req.urls)}
+
+
+@app.post("/ingest")
+async def ingest(req: SuggestRequest):
+    enqueue(redis_client, req.url, 0)
+    enqueue_suggestion(
+        redis_client,
+        {"url": req.url, "reason": req.reason or "", "contact": req.contact or ""},
+    )
+    return {"ok": True, "queued": req.url}
+
+
+@app.get("/donate")
+async def donate():
+    if cfg.donate_url:
+        return RedirectResponse(url=cfg.donate_url, status_code=307)
+    raise HTTPException(status_code=404, detail="Donate URL not configured")
 
 
 @app.get("/search")

@@ -15,6 +15,21 @@ def enqueue(r: redis.Redis, url: str, depth: int) -> None:
     r.lpush("crawl:queue", payload)
 
 
+def enqueue_suggestion(r: redis.Redis, payload: dict) -> None:
+    r.lpush("suggest:queue", json.dumps(payload))
+
+
+def list_suggestions(r: redis.Redis, limit: int = 50) -> list[dict]:
+    items = r.lrange("suggest:queue", 0, max(0, limit - 1))
+    results = []
+    for item in items:
+        try:
+            results.append(json.loads(item))
+        except json.JSONDecodeError:
+            continue
+    return results
+
+
 def dequeue(r: redis.Redis) -> Optional[dict]:
     item = r.brpop("crawl:queue", timeout=5)
     if not item:

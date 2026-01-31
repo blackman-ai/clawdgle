@@ -26,6 +26,8 @@ A markdown-first, agent-optimized web indexer: crawl -> normalize -> store -> se
    - `open http://localhost:8080/admin-ui`
 8) Admin stats JSON:
    - `curl 'localhost:8080/stats?token=YOUR_TOKEN'`
+9) Self-serve indexing (immediate enqueue):
+   - `curl -X POST 'localhost:8080/ingest' -H 'Content-Type: application/json' -d '{"url":"https://example.com"}'`
 
 ## Design goals
 - Markdown-first storage, usable by autonomous agents

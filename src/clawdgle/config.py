@@ -49,6 +49,7 @@ class Config:
     admin_token: str
     admin_basic_user: str
     admin_basic_pass: str
+    donate_url: str
 
 
 def load_config() -> Config:
@@ -84,4 +85,5 @@ def load_config() -> Config:
         admin_token=os.getenv("ADMIN_TOKEN", ""),
         admin_basic_user=os.getenv("ADMIN_BASIC_USER", ""),
         admin_basic_pass=os.getenv("ADMIN_BASIC_PASS", ""),
+        donate_url=os.getenv("DONATE_URL", ""),
     )
