@@ -116,6 +116,10 @@ async def admin_ui():
     <h1>clawdgle admin</h1>
     <p>Enter your admin token to view crawler status.</p>
     <input id="token" placeholder="Admin token" />
+    <div style="margin-top: 8px;">
+      <input id="user" placeholder="Basic auth user (optional)" />
+      <input id="pass" type="password" placeholder="Basic auth pass (optional)" />
+    </div>
     <button id="load">Load status</button>
     <label style="margin-left: 10px;">
       <input id="auto" type="checkbox" /> Auto refresh (10s)
@@ -130,14 +134,20 @@ async def admin_ui():
       const status = document.getElementById("status");
       const updated = document.getElementById("updated");
       const auto = document.getElementById("auto");
+      const user = document.getElementById("user");
+      const pass = document.getElementById("pass");
       let timer = null;
 
       async function loadStatus() {
         out.textContent = "Loading...";
         status.textContent = "Status: loading...";
-        const url = "/admin?token=" + encodeURIComponent(token.value || "");
+        const headers = { "x-admin-token": token.value || "" };
+        if (user.value && pass.value) {
+          const basic = btoa(user.value + ":" + pass.value);
+          headers["authorization"] = "Basic " + basic;
+        }
         try {
-          const resp = await fetch(url);
+          const resp = await fetch("/admin", { headers });
           if (!resp.ok) {
             out.textContent = "Error: " + resp.status + " " + resp.statusText;
             status.textContent = "Status: error";
